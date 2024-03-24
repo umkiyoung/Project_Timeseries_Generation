@@ -1,0 +1,1 @@
+{"Embedding Loss": 0.12418650835752487, "_timestamp": 1711282776.8134425, "_runtime": 398.5887553691864, "_step": 1124, "Supervised Loss": 0.0013907602988183498, "Discriminator Loss": 2.6757497787475586, "Generator Loss": 2.733297109603882, "_wandb": {"runtime": 398}}

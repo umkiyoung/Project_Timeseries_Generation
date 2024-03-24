@@ -1,0 +1,52 @@
+{
+    "os": "Windows-10-10.0.19045-SP0",
+    "python": "3.11.5",
+    "heartbeatAt": "2024-03-24T12:12:59.368411",
+    "startedAt": "2024-03-24T12:12:58.219701",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "<python with no main file>",
+    "codePathLocal": null,
+    "git": {
+        "remote": "https://github.com/umkiyoung/Project_Timeseries_Generation.git",
+        "commit": "8638885b9d21d3ee028375419be55765c23e80dc"
+    },
+    "email": "se99an@gmail.com",
+    "root": "C:/Python/repos_python/Project_Timeseries_Generation",
+    "host": "DESKTOP-8AFQ3UJ",
+    "username": "SILAB",
+    "executable": "c:\\Anaconda3\\python.exe",
+    "cpu_count": 8,
+    "cpu_count_logical": 16,
+    "cpu_freq": {
+        "current": 2904.0,
+        "min": 0.0,
+        "max": 2904.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2904.0,
+            "min": 0.0,
+            "max": 2904.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 341.1576499938965,
+            "used": 112.69438934326172
+        }
+    },
+    "gpu": "GeForce GTX 1660 SUPER",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "GeForce GTX 1660 SUPER",
+            "memory_total": 6442450944
+        }
+    ],
+    "memory": {
+        "total": 31.900005340576172
+    }
+}
