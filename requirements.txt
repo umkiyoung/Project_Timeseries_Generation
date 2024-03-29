@@ -1,0 +1,9 @@
+finance-datareader
+numpy
+pandas
+scipy
+torch
+wandb
+matplotlib
+plotly
+beautifulsoup4
