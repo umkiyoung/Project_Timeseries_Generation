@@ -1,7 +1,11 @@
 import torch
 import numpy as np
 import FinanceDataReader as fdr
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+
+from torch import Tensor
+from utils import min_max_scale_each_sample
+from torch.utils.data import DataLoader, Dataset
+
 
 
 class Stock(Dataset):
@@ -13,7 +17,7 @@ class Stock(Dataset):
         df = fdr.DataReader(symbols, sdate, edate)
         self.data = self.generate_stock_sample(df, window)
         
-    def generate_stock_sample(self, df, window):
+    def generate_stock_sample(self, df, window) -> Tensor:
         df = torch.from_numpy(df.to_numpy())
         sample_n = len(df)-window+1
         data = torch.zeros(sample_n, window, df.shape[-1], dtype=torch.float64)
@@ -22,21 +26,10 @@ class Stock(Dataset):
             end = i + window
             data[i, :, :] = df[start:end]
         
-        data, _, _ = self.min_max_scale_each_sample(data)
+        data, _, _ = min_max_scale_each_sample(data)
+        data = data.float()
         
         return data
-    
-    def min_max_scale_each_sample(self, data):
-        min_val = data.min(dim=1, keepdim=True)[0]
-        max_val = data.max(dim=1, keepdim=True)[0]
-        scaled_data = (data-min_val)/(max_val - min_val)
-        
-        return scaled_data, min_val, max_val
-
-    def inverse_min_max_scale(self, scaled_data, min_val, max_val):
-        origin_data = scaled_data*(max_val-min_val)+ min_val
-
-        return origin_data
     
     def __len__(self):
         return len(self.data)
@@ -57,7 +50,7 @@ class Sine(Dataset):
         '''
         self.data = self.generate_sine_ts(sample_n, seq_len, feature_n)
         
-    def generate_sine_ts(self, sample_n, seq_len, feature_n):
+    def generate_sine_ts(self, sample_n, seq_len, feature_n) -> Tensor:
         data = list()
         for i in range(sample_n):
             sines = list()      
@@ -71,8 +64,9 @@ class Sine(Dataset):
             data.append(sines)
         
         data = np.array(data)
-        data = torch.from_numpy(data)
-                        
+        data = torch.from_numpy(data).float()
+        data, _, _ = min_max_scale_each_sample(data)
+
         return data
 
     def __len__(self):
@@ -104,7 +98,7 @@ class SyntheticTS(Dataset):
         """
         self.data = self.generate_synthetic_ts(sample_n, seq_len, freq, noise_level, trend)
         
-    def generate_synthetic_ts(self, sample_n, seq_len, freq, noise_level, trend):
+    def generate_synthetic_ts(self, sample_n, seq_len, freq, noise_level, trend) -> Tensor:
         time = np.linspace(0, 2 * np.pi, seq_len)
         sine_wave = np.sin(freq * time)
         
@@ -116,6 +110,9 @@ class SyntheticTS(Dataset):
         for i in range(sample_n):
             noise = np.random.normal(0, noise_level, seq_len)
             data[i, :] = sine_wave + noise
+        
+        data = torch.from_numpy(data).float()
+        data, _, _ = min_max_scale_each_sample(data)
         
         return data
 
@@ -138,8 +135,6 @@ class DataloaderHandler():
         self.shuffle = shuffle
         self.drop_last = drop_last
     
-
-        
     def synthetic_dataloader(self, 
                              sample_n = 10000, 
                              seq_len = 24, 
@@ -168,7 +163,12 @@ class DataloaderHandler():
         
         return dataloader
     
-    def stock_dataloader(self, symbols=["AAPL", "GOOG"], sdate="2010", edate=None,window=24):
+    def stock_dataloader(self, 
+                         symbols=["AAPL", "GOOG"], 
+                         sdate="2010", 
+                         edate=None,
+                         window=24):
+        
         dataset = Stock(symbols, sdate, edate, window)
         dataloader = DataLoader(dataset,
                                 batch_size=self.batch_size,
@@ -177,3 +177,4 @@ class DataloaderHandler():
         
         return dataloader
     
+

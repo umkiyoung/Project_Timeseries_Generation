@@ -7,7 +7,7 @@ python v3.12
 ## Description
 This repository contains the implementation of the TimeGAN model, as described in the original paper. Please note that the implementation is not yet fully complete.
 
-## code structure
+you can easily test TimeGAN just execute TimeGAN_tuto.ipynb
 
 ## Files
 - `TimeGAN.ipynb`: This Jupyter notebook contains the scratch code from the paper.

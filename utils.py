@@ -2,28 +2,23 @@ import numpy as np
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+from torch import Tensor
 
 
-def random_generator (batch_size, z_dim, T_mb, max_seq_len):
-  """Random vector generation. (Generates a latent vector that is used in the Generator.)
-  
-  Args:
-    - batch_size: size of the random vector
-    - z_dim: dimension of random vector
-    - T_mb: time information for the random vector
-    - max_seq_len: maximum sequence length
+def min_max_scale_each_sample(data : Tensor):
+    min_val = data.min(dim=1, keepdim=True)[0]
+    max_val = data.max(dim=1, keepdim=True)[0]
+    scaled_data = (data-min_val)/(max_val - min_val)
     
-  Returns:
-    - Z_mb: generated random vector
-  """
-  Z_mb = list()
-  for i in range(batch_size):
-    temp = np.zeros([max_seq_len, z_dim])
-    temp_Z = np.random.uniform(0., 10, [T_mb[i], z_dim])
-    temp[:T_mb[i],:] = temp_Z
-    Z_mb.append(temp_Z)
-  return Z_mb
+    return scaled_data, min_val, max_val
 
+def inverse_min_max_scale(scaled_data : Tensor,
+                          min_val : Tensor, 
+                          max_val : Tensor):
+    origin_data = scaled_data*(max_val-min_val)+ min_val
+
+    return origin_data
+  
 def visualization (ori_data, generated_data, analysis):
   """Using PCA or tSNE for generated and original data visualization.
   
@@ -76,7 +71,8 @@ def visualization (ori_data, generated_data, analysis):
     plt.title('PCA plot')
     plt.xlabel('x-pca')
     plt.ylabel('y_pca')
-    plt.show()
+    plt.savefig("pca_test.png")
+    # plt.show()
     
   elif analysis == 'tsne':
     
@@ -100,25 +96,9 @@ def visualization (ori_data, generated_data, analysis):
     plt.title('t-SNE plot')
     plt.xlabel('x-tsne')
     plt.ylabel('y_tsne')
-    plt.show()
-    
-def extract_time (data):
-  """Returns Maximum sequence length and each sequence length.
-  
-  Args:
-    - data: original data
-    
-  Returns:
-    - time: extracted time information
-    - max_seq_len: maximum sequence length
-  """
-  time = list()
-  max_seq_len = 0
-  for i in range(len(data)):
-    max_seq_len = max(max_seq_len, len(data[i][:,0]))
-    time.append(len(data[i][:,0]))
-    
-  return time, max_seq_len
+    plt.savefig("sne_test.png")
+
+    # plt.show()
 
 def discriminative_score(num_batches, G, D, S, E, dataloader, batch_size, dim, seq_len, hidden_dim):
   """
