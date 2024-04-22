@@ -33,21 +33,6 @@ class TrendBlock(nn.Module):
         return trend_vals
     
 
-class MovingBlock(nn.Module):
-    """
-    Model trend of time series using the moving average.
-    """
-    def __init__(self, out_dim):
-        super(MovingBlock, self).__init__()
-        size = max(min(int(out_dim / 4), 24), 4)
-        self.decomp = series_decomp(size)
-
-    def forward(self, input):
-        b, c, h = input.shape
-        x, trend_vals = self.decomp(input)
-        return x, trend_vals
-
-
 class FourierLayer(nn.Module):
     """
     Model seasonality of time series using the inverse DFT.

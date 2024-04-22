@@ -5,11 +5,13 @@ import importlib
 def load_yaml_config(path):
     with open(path) as f:
         config = yaml.full_load(f)
+    
     return config
 
 def instantiate_from_config(config):
     module, cls = config["target"].rsplit(".", 1)
     cls = getattr(importlib.import_module(module, package=None), cls)
+    
     return cls(**config.get("params", dict()))
 
 def get_model_parameters_info(model):

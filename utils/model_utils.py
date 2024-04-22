@@ -1,12 +1,7 @@
 import math
-import scipy
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-
-from torch import nn, einsum
-from functools import partial
-from einops import rearrange, reduce
-from scipy.fftpack import next_fast_len
 
 
 def exists(x):
@@ -28,30 +23,8 @@ def extract(a, t, x_shape):
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
-def Upsample(dim, dim_out=None):
-    return nn.Sequential(
-        nn.Upsample(scale_factor=2, mode='nearest'),
-        nn.Conv1d(dim, default(dim_out, dim), 3, padding=1)
-    )
-
-def Downsample(dim, dim_out=None):
-    return nn.Conv1d(dim, default(dim_out, dim), 4, 2, 1)
-
-
-# normalization functions
-
-def normalize_to_neg_one_to_one(x):
-    # used
-    return x * 2 - 1
-
-def unnormalize_to_zero_to_one(x):
-    # used
-
-    return (x + 1) * 0.5
-
 
 # sinusoidal positional embeds
-
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -68,7 +41,6 @@ class SinusoidalPosEmb(nn.Module):
 
 
 # learnable positional embeds
-
 class LearnablePositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=1024):
         super(LearnablePositionalEncoding, self).__init__()
@@ -124,26 +96,6 @@ class series_decomp(nn.Module):
         return res, moving_mean
 
 
-class series_decomp_multi(nn.Module):
-    """
-    Series decomposition block
-    """
-    def __init__(self, kernel_size):
-        super(series_decomp_multi, self).__init__()
-        self.moving_avg = [moving_avg(kernel, stride=1) for kernel in kernel_size]
-        self.layer = torch.nn.Linear(1, len(kernel_size))
-
-    def forward(self, x):
-        moving_mean=[]
-        for func in self.moving_avg:
-            moving_avg = func(x)
-            moving_mean.append(moving_avg.unsqueeze(-1))
-        moving_mean=torch.cat(moving_mean,dim=-1)
-        moving_mean = torch.sum(moving_mean*nn.Softmax(-1)(self.layer(x.unsqueeze(-1))),dim=-1)
-        res = x - moving_mean
-        return res, moving_mean 
-
-
 class Transpose(nn.Module):
     """ Wrapper class of torch.transpose() for Sequential module. """
     def __init__(self, shape: tuple):
@@ -165,22 +117,6 @@ class Conv_MLP(nn.Module):
 
     def forward(self, x):
         return self.sequential(x).transpose(1, 2)
-    
-
-class Transformer_MLP(nn.Module):
-    def __init__(self, n_embd, mlp_hidden_times, act, resid_pdrop):
-        super().__init__()
-        self.sequential = nn.Sequential(
-            nn.Conv1d(in_channels=n_embd, out_channels=int(mlp_hidden_times * n_embd), kernel_size=1, padding=0),
-            act,
-            nn.Conv1d(in_channels=int(mlp_hidden_times * n_embd), out_channels=int(mlp_hidden_times * n_embd), kernel_size=3, padding=1),
-            act,
-            nn.Conv1d(in_channels=int(mlp_hidden_times * n_embd), out_channels=n_embd,  kernel_size=3, padding=1),
-            nn.Dropout(p=resid_pdrop),
-        )
-
-    def forward(self, x):
-        return self.sequential(x)
     
 
 class GELU2(nn.Module):
@@ -207,20 +143,3 @@ class AdaLayerNorm(nn.Module):
         x = self.layernorm(x) * (1 + scale) + shift
         return x
     
-
-class AdaInsNorm(nn.Module):
-    def __init__(self, n_embd):
-        super().__init__()
-        self.emb = SinusoidalPosEmb(n_embd)
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(n_embd, n_embd*2)
-        self.instancenorm = nn.InstanceNorm1d(n_embd)
-
-    def forward(self, x, timestep, label_emb=None):
-        emb = self.emb(timestep)
-        if label_emb is not None:
-            emb = emb + label_emb
-        emb = self.linear(self.silu(emb)).unsqueeze(1)
-        scale, shift = torch.chunk(emb, 2, dim=2)
-        x = self.instancenorm(x.transpose(-1, -2)).transpose(-1,-2) * (1 + scale) + shift
-        return x

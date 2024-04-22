@@ -61,7 +61,6 @@ class Diffusion_TS(nn.Module):
         self.fast_sampling = self.sampling_timesteps < timesteps
 
         # helper function to register buffer from float64 to float32
-
         register_buffer = lambda name, val: self.register_buffer(name, val.to(torch.float32))
 
         register_buffer('betas', betas)
@@ -69,7 +68,6 @@ class Diffusion_TS(nn.Module):
         register_buffer('alphas_cumprod_prev', alphas_cumprod_prev)
 
         # calculations for diffusion q(x_t | x_{t-1}) and others
-
         register_buffer('sqrt_alphas_cumprod', torch.sqrt(alphas_cumprod))
         register_buffer('sqrt_one_minus_alphas_cumprod', torch.sqrt(1. - alphas_cumprod))
         register_buffer('log_one_minus_alphas_cumprod', torch.log(1. - alphas_cumprod))
@@ -77,21 +75,17 @@ class Diffusion_TS(nn.Module):
         register_buffer('sqrt_recipm1_alphas_cumprod', torch.sqrt(1. / alphas_cumprod - 1))
 
         # calculations for posterior q(x_{t-1} | x_t, x_0)
-
         posterior_variance = betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod)
 
         # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
-
         register_buffer('posterior_variance', posterior_variance)
 
         # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
-
         register_buffer('posterior_log_variance_clipped', torch.log(posterior_variance.clamp(min=1e-20)))
         register_buffer('posterior_mean_coef1', betas * torch.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod))
         register_buffer('posterior_mean_coef2', (1. - alphas_cumprod_prev) * torch.sqrt(alphas) / (1. - alphas_cumprod))
 
         # calculate reweighting
-        
         register_buffer('loss_weight', torch.sqrt(alphas) * torch.sqrt(1. - alphas_cumprod) / betas / 100)
     
     def cosine_beta_schedule(self, timesteps, s=0.008):
@@ -105,6 +99,7 @@ class Diffusion_TS(nn.Module):
         alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
         betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
         return torch.clip(betas, 0, 0.999)
+    
     @property
     def loss_fn(self):
         if self.loss_type == 'l1':
@@ -130,12 +125,11 @@ class Diffusion_TS(nn.Module):
         noise = default(noise, lambda: torch.randn_like(x_start))
         if target is None:
             target = x_start
-
+        
         x = self.q_sample(x_start=x_start, t=t, noise=noise)  # noise sample
         model_out = self.output(x, t, padding_masks)
-
         train_loss = self.loss_fn(model_out, target, reduction='none')
-
+        
         fourier_loss = torch.tensor([0.])
         if self.use_ff:
             fft1 = torch.fft.fft(model_out.transpose(1, 2), norm='forward')
@@ -144,17 +138,17 @@ class Diffusion_TS(nn.Module):
             fourier_loss = self.loss_fn(torch.real(fft1), torch.real(fft2), reduction='none')\
                            + self.loss_fn(torch.imag(fft1), torch.imag(fft2), reduction='none')
             train_loss +=  self.ff_weight * fourier_loss
-        
         train_loss = reduce(train_loss, 'b ... -> b (...)', 'mean')
         train_loss = train_loss * extract(self.loss_weight, t, train_loss.shape)
+        
         return train_loss.mean()
 
     def forward(self, x, **kwargs):
         b, c, n, device, feature_size, = *x.shape, x.device, self.feature_size
         assert n == feature_size, f'number of variable must be {feature_size}'
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
+        
         return self._train_loss(x_start=x, t=t, **kwargs)
-
     
     # sampling
     def generate_mts(self, batch_size=16):
@@ -169,7 +163,6 @@ class Diffusion_TS(nn.Module):
 
         # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
         times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
-
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1], times[1:]))  # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
         img = torch.randn(shape, device=device)
@@ -241,5 +234,6 @@ class Diffusion_TS(nn.Module):
         )
         posterior_variance = extract(self.posterior_variance, t, x_t.shape)
         posterior_log_variance_clipped = extract(self.posterior_log_variance_clipped, t, x_t.shape)
+        
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
     

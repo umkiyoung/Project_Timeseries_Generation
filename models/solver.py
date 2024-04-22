@@ -18,7 +18,6 @@ def cycle(dl):
         for data in dl:
             yield data
 
-
 class Trainer(object):
     def __init__(self, config, model, dataloader, logger=None):
         super().__init__()
