@@ -7,3 +7,10 @@ wandb
 matplotlib
 plotly
 beautifulsoup4
+einops
+ipykernel
+pyyaml
+scikit-learn
+seaborn
+tqdm
+ema_pytorch

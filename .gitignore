@@ -1,3 +1,5 @@
 .venv/
 test/
 __pycache__/
+check_points/
+output/
