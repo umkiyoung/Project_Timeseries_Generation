@@ -37,9 +37,9 @@ class SineDataset(Dataset):
                              ):
         np.random.seed(seed)
         sine_data = list()
-        for n in tqdm(range(n_samples), total=n_samples, desc="Sampling sine-dataset"):
+        for _ in tqdm(range(n_samples), total=n_samples, desc="Sampling sine-dataset"):
             sine = list()
-            for d in range(feature_dim):
+            for _ in range(feature_dim):
                 freq, phase = np.random.uniform(0, 0.1, 2)            
                 sine_sequence = [np.sin(freq * j + phase) for j in range(window)]
                 sine.append(sine_sequence)
@@ -65,6 +65,7 @@ class StockDataset(Dataset):
                  normalize=True,
                  period='train',
                  ):
+        
         raw_df = fdr.DataReader(symbol, sdate, edate)
         self.data = self.generate_stock_sample(raw_df, window)
         self.window = window
@@ -152,9 +153,9 @@ class SyntheticDataset(Dataset):
                               ) -> Tensor:
         np.random.seed(seed)
         syn_data = list()
-        for n in tqdm(range(n_samples), total=n_samples, desc="Sampling synthetic-dataset"):
+        for _ in tqdm(range(n_samples), total=n_samples, desc="Sampling synthetic-dataset"):
             synthetic = list()
-            for d in range(feature_dim):
+            for _ in range(feature_dim):
                 freq, phase = np.random.uniform(0, 3, 2)            
                 linear_trend = np.linspace(0, np.random.uniform(-6,6), window)
                 seasonal = [np.sin(freq * j + phase) for j in range(window)]

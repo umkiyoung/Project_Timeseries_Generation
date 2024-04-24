@@ -14,7 +14,7 @@ class Trainer(object):
         super().__init__()
         self.model = model
         self.device = self.model.betas.device
-        self.train_num_steps = config['solver']['max_epochs'] # ?
+        self.train_num_steps = config['solver']['max_epochs']
         self.gradient_accumulate_every = config['solver']['gradient_accumulate_every']
         self.save_cycle = config['solver']['save_cycle']
         self.dl = cycle(dataloader)
@@ -61,14 +61,6 @@ class Trainer(object):
         step = 0
         with tqdm(initial=step, total=self.train_num_steps) as pbar:
             while step < self.train_num_steps:
-                # total_loss = 0.
-                # for _ in range(self.gradient_accumulate_every):
-                #     data = next(self.dl).to(device)
-                #     loss = self.model(data, target=data)
-                #     loss = loss / self.gradient_accumulate_every
-                #     loss.backward()
-                #     total_loss += loss.item()
-                    
                 data = next(self.dl).to(device)
                 loss = self.model(data, target=data)
                 loss.backward()
@@ -92,10 +84,6 @@ class Trainer(object):
         print('training complete')
 
     def sample(self, num, size_every, shape):
-        # shape = [24, 6] 
-        # num = 10000
-        # size_every = 2001
-        
         samples = np.empty([0, shape[0], shape[1]])
         num_cycle = int(num // size_every) + 1
 

@@ -2,20 +2,17 @@ model:
   target: models.diffusion.Diffusion_TS
   params:
     seq_length: 24
-    feature_size: 5
+    n_feat: 5
     n_layer_enc: 1
     n_layer_dec: 2
-    d_model: 64  # 4 X 16
+    n_embd: 64  # 4 X 16
     timesteps: 500
     sampling_timesteps: 500
     loss_type: 'l1'
-    beta_schedule: 'cosine'
     n_heads: 4
     mlp_hidden_times: 4
-    attn_pd: 0.0
-    resid_pd: 0.0
-    kernel_size: 1
-    padding_size: 0
+    attn_pdrop: 0.0
+    resid_pdrop: 0.0
 
 solver:
   base_lr: 1.0e-5

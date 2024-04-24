@@ -7,6 +7,7 @@ import numpy as np
 from einops import rearrange, reduce, repeat
 
 class SinusoidalPosEmb(nn.Module):
+    # ?
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -18,10 +19,12 @@ class SinusoidalPosEmb(nn.Module):
         emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
         emb = x[:, None] * emb[None, :]
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
+        
         return emb
 
 
 class LearnablePositionalEncoding(nn.Module):
+    # ?
     def __init__(self, d_model, dropout=0.1, max_len=1024):
         super(LearnablePositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -40,13 +43,14 @@ class LearnablePositionalEncoding(nn.Module):
         """
         # print(x.shape)
         x = x + self.pe
+        
         return self.dropout(x)
 
 
 class Transpose(nn.Module):
-    """ Wrapper class of torch.transpose() for Sequential module. """
+    """ Wrapper class of torch.transpose() for Sequential module"""
     def __init__(self, shape: tuple):
-        super(Transpose, self).__init__()
+        super().__init__()
         self.shape = shape
 
     def forward(self, x):
@@ -54,26 +58,20 @@ class Transpose(nn.Module):
     
 
 class Conv_MLP(nn.Module):
-    def __init__(self, in_dim, out_dim, resid_pdrop=0.):
+    def __init__(self, in_dim, out_dim, pdrop=0.):
         super().__init__()
         self.sequential = nn.Sequential(
             Transpose(shape=(1, 2)),
-            nn.Conv1d(in_dim, out_dim, 3, stride=1, padding=1),
-            nn.Dropout(p=resid_pdrop),
+            nn.Conv1d(in_dim, out_dim, kernel_size=3, stride=1, padding=1),
+            nn.Dropout(p=pdrop),
         )
 
     def forward(self, x):
         return self.sequential(x).transpose(1, 2)
     
 
-class GELU2(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self, x):
-        return x * F.sigmoid(1.702 * x)
-
-
 class AdaLayerNorm(nn.Module):
+    # ?
     def __init__(self, n_embd):
         super().__init__()
         self.emb = SinusoidalPosEmb(n_embd)
@@ -81,13 +79,12 @@ class AdaLayerNorm(nn.Module):
         self.linear = nn.Linear(n_embd, n_embd*2)
         self.layernorm = nn.LayerNorm(n_embd, elementwise_affine=False)
 
-    def forward(self, x, timestep, label_emb=None):
+    def forward(self, x, timestep):
         emb = self.emb(timestep)
-        if label_emb is not None:
-            emb = emb + label_emb
         emb = self.linear(self.silu(emb)).unsqueeze(1)
         scale, shift = torch.chunk(emb, 2, dim=2)
         x = self.layernorm(x) * (1 + scale) + shift
+        
         return x
 
 
@@ -95,12 +92,12 @@ class TrendBlock(nn.Module):
     """
     Model trend of time series using the polynomial regressor.
     """
-    def __init__(self, in_dim, out_dim, in_feat, out_feat, act):
+    def __init__(self, in_dim, out_dim, in_feat, out_feat):
         super(TrendBlock, self).__init__()
         trend_poly = 3
         self.trend = nn.Sequential(
             nn.Conv1d(in_channels=in_dim, out_channels=trend_poly, kernel_size=3, padding=1),
-            act,
+            nn.GELU(),
             Transpose(shape=(1, 2)),
             nn.Conv1d(in_feat, out_feat, 3, stride=1, padding=1)
         )
@@ -109,7 +106,6 @@ class TrendBlock(nn.Module):
         self.poly_space = torch.stack([lin_space ** float(p + 1) for p in range(trend_poly)], dim=0)
 
     def forward(self, input):
-        b, c, h = input.shape
         x = self.trend(input).transpose(1, 2)
         trend_vals = torch.matmul(x.transpose(1, 2), self.poly_space.to(x.device))
         trend_vals = trend_vals.transpose(1, 2)
@@ -180,7 +176,6 @@ class SeasonBlock(nn.Module):
         self.poly_space = torch.cat([s1, s2])
 
     def forward(self, input):
-        b, c, h = input.shape
         x = self.season(input)
         season_vals = torch.matmul(x.transpose(1, 2), self.poly_space.to(x.device))
         season_vals = season_vals.transpose(1, 2)
@@ -189,13 +184,14 @@ class SeasonBlock(nn.Module):
 
 class FullAttention(nn.Module):
     def __init__(self,
-                 n_embd, # the embed dim
-                 n_head, # the number of heads
-                 attn_pdrop=0.1, # attention dropout prob
-                 resid_pdrop=0.1, # residual attention dropout prob
+                 n_embd,
+                 n_heads,
+                 attn_pdrop=0.1, 
+                 resid_pdrop=0.1,
     ):
         super().__init__()
-        assert n_embd % n_head == 0
+        assert n_embd % n_heads == 0
+        
         # key, query, value projections for all heads
         self.key = nn.Linear(n_embd, n_embd)
         self.query = nn.Linear(n_embd, n_embd)
@@ -204,15 +200,16 @@ class FullAttention(nn.Module):
         # regularization
         self.attn_drop = nn.Dropout(attn_pdrop)
         self.resid_drop = nn.Dropout(resid_pdrop)
+        
         # output projection
         self.proj = nn.Linear(n_embd, n_embd)
-        self.n_head = n_head
+        self.n_heads = n_heads
 
-    def forward(self, x, mask=None):
+    def forward(self, x):
         B, T, C = x.size()
-        k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        k = self.key(x).view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
+        q = self.query(x).view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
+        v = self.value(x).view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T)
 
         att = F.softmax(att, dim=-1) # (B, nh, T, T)
@@ -228,14 +225,15 @@ class FullAttention(nn.Module):
 
 class CrossAttention(nn.Module):
     def __init__(self,
-                 n_embd, # the embed dim
-                 condition_embd, # condition dim
-                 n_head, # the number of heads
-                 attn_pdrop=0.1, # attention dropout prob
-                 resid_pdrop=0.1, # residual attention dropout prob
+                 n_embd,
+                 condition_embd,
+                 n_heads,
+                 attn_pdrop=0.1,
+                 resid_pdrop=0.1,
     ):
         super().__init__()
-        assert n_embd % n_head == 0
+        assert n_embd % n_heads == 0
+        
         # key, query, value projections for all heads
         self.key = nn.Linear(condition_embd, n_embd)
         self.query = nn.Linear(n_embd, n_embd)
@@ -244,17 +242,19 @@ class CrossAttention(nn.Module):
         # regularization
         self.attn_drop = nn.Dropout(attn_pdrop)
         self.resid_drop = nn.Dropout(resid_pdrop)
+        
         # output projection
         self.proj = nn.Linear(n_embd, n_embd)
-        self.n_head = n_head
+        self.n_heads = n_heads
 
-    def forward(self, x, encoder_output, mask=None):
+    def forward(self, x, encoder_output):
         B, T, C = x.size()
         B, T_E, _ = encoder_output.size()
+        
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k = self.key(encoder_output).view(B, T_E, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = self.value(encoder_output).view(B, T_E, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        k = self.key(encoder_output).view(B, T_E, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
+        q = self.query(x).view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
+        v = self.value(encoder_output).view(B, T_E, self.n_heads, C // self.n_heads).transpose(1, 2) # (B, nh, T, hs)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T)
 
         att = F.softmax(att, dim=-1) # (B, nh, T, T)
@@ -271,67 +271,61 @@ class CrossAttention(nn.Module):
 class EncoderBlock(nn.Module):
     """ an unassuming Transformer block """
     def __init__(self,
-                 n_embd=1024,
-                 n_head=16,
-                 attn_pdrop=0.1,
-                 resid_pdrop=0.1,
-                 mlp_hidden_times=4,
-                 activate='GELU'
+                 n_embd,
+                 n_heads,
+                 attn_pdrop,
+                 resid_pdrop,
+                 mlp_hidden_times,
                  ):
         super().__init__()
-
         self.ln1 = AdaLayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
         self.attn = FullAttention(
                 n_embd=n_embd,
-                n_head=n_head,
+                n_heads=n_heads,
                 attn_pdrop=attn_pdrop,
                 resid_pdrop=resid_pdrop,
             )
         
-        assert activate in ['GELU', 'GELU2']
-        act = nn.GELU() if activate == 'GELU' else GELU2()
-
         self.mlp = nn.Sequential(
                 nn.Linear(n_embd, mlp_hidden_times * n_embd),
-                act,
+                nn.GELU(),
                 nn.Linear(mlp_hidden_times * n_embd, n_embd),
                 nn.Dropout(resid_pdrop),
             )
         
-    def forward(self, x, timestep, mask=None, label_emb=None):
-        a, att = self.attn(self.ln1(x, timestep, label_emb), mask=mask)
+    def forward(self, x, timestep):
+        a, att = self.attn(self.ln1(x, timestep))
         x = x + a
         x = x + self.mlp(self.ln2(x))   # only one really use encoder_output
+        
         return x, att
 
 
 class Encoder(nn.Module):
     def __init__(
         self,
-        n_layer=14,
-        n_embd=1024,
-        n_head=16,
-        attn_pdrop=0.,
-        resid_pdrop=0.,
-        mlp_hidden_times=4,
-        block_activate='GELU',
+        n_layer,
+        n_embd,
+        n_heads,
+        attn_pdrop,
+        resid_pdrop,
+        mlp_hidden_times,
     ):
         super().__init__()
+        self.blocks = nn.Sequential(
+            *[EncoderBlock(n_embd=n_embd,
+                           n_heads=n_heads,
+                           attn_pdrop=attn_pdrop,
+                           resid_pdrop=resid_pdrop,
+                           mlp_hidden_times=mlp_hidden_times,
+                           ) 
+              for _ in range(n_layer)])
 
-        self.blocks = nn.Sequential(*[EncoderBlock(
-                n_embd=n_embd,
-                n_head=n_head,
-                attn_pdrop=attn_pdrop,
-                resid_pdrop=resid_pdrop,
-                mlp_hidden_times=mlp_hidden_times,
-                activate=block_activate,
-        ) for _ in range(n_layer)])
-
-    def forward(self, input, t, padding_masks=None, label_emb=None):
+    def forward(self, input, t):
         x = input
         for block_idx in range(len(self.blocks)):
-            x, _ = self.blocks[block_idx](x, t, mask=padding_masks, label_emb=label_emb)
+            x, _ = self.blocks[block_idx](x, t)
         return x
 
 
@@ -340,13 +334,12 @@ class DecoderBlock(nn.Module):
     def __init__(self,
                  n_channel,
                  n_feat,
-                 n_embd=1024,
-                 n_head=16,
-                 attn_pdrop=0.1,
-                 resid_pdrop=0.1,
-                 mlp_hidden_times=4,
-                 activate='GELU',
-                 condition_dim=1024,
+                 n_embd,
+                 n_heads,
+                 attn_pdrop,
+                 resid_pdrop,
+                 mlp_hidden_times,
+                 condition_dim,
                  ):
         super().__init__()
         
@@ -355,31 +348,29 @@ class DecoderBlock(nn.Module):
 
         self.attn1 = FullAttention(
                 n_embd=n_embd,
-                n_head=n_head,
+                n_heads=n_heads,
                 attn_pdrop=attn_pdrop, 
                 resid_pdrop=resid_pdrop,
                 )
+        
         self.attn2 = CrossAttention(
                 n_embd=n_embd,
                 condition_embd=condition_dim,
-                n_head=n_head,
+                n_heads=n_heads,
                 attn_pdrop=attn_pdrop,
                 resid_pdrop=resid_pdrop,
                 )
         
         self.ln1_1 = AdaLayerNorm(n_embd)
 
-        assert activate in ['GELU', 'GELU2']
-        act = nn.GELU() if activate == 'GELU' else GELU2()
-
-        self.trend = TrendBlock(n_channel, n_channel, n_embd, n_feat, act=act)
+        self.trend = TrendBlock(n_channel, n_channel, n_embd, n_feat)
         # self.decomp = MovingBlock(n_channel)
         self.seasonal = FourierLayer(d_model=n_embd)
         # self.seasonal = SeasonBlock(n_channel, n_channel)
 
         self.mlp = nn.Sequential(
             nn.Linear(n_embd, mlp_hidden_times * n_embd),
-            act,
+            nn.GELU(),
             nn.Linear(mlp_hidden_times * n_embd, n_embd),
             nn.Dropout(resid_pdrop),
         )
@@ -387,10 +378,10 @@ class DecoderBlock(nn.Module):
         self.proj = nn.Conv1d(n_channel, n_channel * 2, 1)
         self.linear = nn.Linear(n_embd, n_feat)
 
-    def forward(self, x, encoder_output, timestep, mask=None, label_emb=None):
-        a, att = self.attn1(self.ln1(x, timestep, label_emb), mask=mask)
+    def forward(self, x, encoder_output, timestep):
+        a, att = self.attn1(self.ln1(x, timestep))
         x = x + a
-        a, att = self.attn2(self.ln1_1(x, timestep), encoder_output, mask=mask)
+        a, att = self.attn2(self.ln1_1(x, timestep), encoder_output)
         x = x + a
         x1, x2 = self.proj(x).chunk(2, dim=1)
         trend, season = self.trend(x1), self.seasonal(x2)
@@ -404,39 +395,37 @@ class Decoder(nn.Module):
         self,
         n_channel,
         n_feat,
-        n_embd=1024,
-        n_head=16,
-        n_layer=10,
-        attn_pdrop=0.1,
-        resid_pdrop=0.1,
-        mlp_hidden_times=4,
-        block_activate='GELU',
-        condition_dim=512    
+        n_embd,
+        n_heads,
+        n_layer,
+        attn_pdrop,
+        resid_pdrop,
+        mlp_hidden_times,
+        condition_dim    
     ):
       super().__init__()
       self.d_model = n_embd
       self.n_feat = n_feat
-      self.blocks = nn.Sequential(*[DecoderBlock(
-                n_feat=n_feat,
-                n_channel=n_channel,
-                n_embd=n_embd,
-                n_head=n_head,
-                attn_pdrop=attn_pdrop,
-                resid_pdrop=resid_pdrop,
-                mlp_hidden_times=mlp_hidden_times,
-                activate=block_activate,
-                condition_dim=condition_dim,
-        ) for _ in range(n_layer)])
+      self.blocks = nn.Sequential(
+          *[DecoderBlock(
+              n_feat=n_feat,
+              n_channel=n_channel,
+              n_embd=n_embd,
+              n_heads=n_heads,
+              attn_pdrop=attn_pdrop,
+              resid_pdrop=resid_pdrop,
+              mlp_hidden_times=mlp_hidden_times,
+              condition_dim=condition_dim) 
+            for _ in range(n_layer)])
       
-    def forward(self, x, t, enc, padding_masks=None, label_emb=None):
+    def forward(self, x, t, enc):
         b, c, _ = x.shape
-        # att_weights = []
         mean = []
         season = torch.zeros((b, c, self.d_model), device=x.device)
         trend = torch.zeros((b, c, self.n_feat), device=x.device)
         for block_idx in range(len(self.blocks)):
             x, residual_mean, residual_trend, residual_season = \
-                self.blocks[block_idx](x, enc, t, mask=padding_masks, label_emb=label_emb)
+                self.blocks[block_idx](x, enc, t)
             season += residual_season
             trend += residual_trend
             mean.append(residual_mean)
@@ -450,49 +439,66 @@ class Transformer(nn.Module):
         self,
         n_feat,
         n_channel,
-        n_layer_enc=5,
-        n_layer_dec=14,
-        n_embd=1024,
-        n_heads=16,
-        attn_pdrop=0.1,
-        resid_pdrop=0.1,
-        mlp_hidden_times=4,
-        block_activate='GELU',
-        max_len=2048,
-        conv_params=None,
-        **kwargs
+        n_layer_enc,
+        n_layer_dec,
+        n_embd,
+        n_heads,
+        attn_pdrop,
+        resid_pdrop,
+        mlp_hidden_times,
+        max_len,
     ):
         super().__init__()
-        self.emb = Conv_MLP(n_feat, n_embd, resid_pdrop=resid_pdrop)
-        self.inverse = Conv_MLP(n_embd, n_feat, resid_pdrop=resid_pdrop)
+        self.embedding = Conv_MLP(n_feat, n_embd, pdrop=resid_pdrop)
+        self.inverse = Conv_MLP(n_embd, n_feat, pdrop=resid_pdrop)
+        
+        self.combine_s = nn.Conv1d(in_channels=n_embd, 
+                                   out_channels=n_feat, 
+                                   kernel_size=1, 
+                                   stride=1, 
+                                   padding_mode='circular', 
+                                   bias=False)
+        
+        self.combine_m = nn.Conv1d(in_channels=n_layer_dec, 
+                                   out_channels=1, 
+                                   kernel_size=1, 
+                                   stride=1,
+                                   padding_mode='circular', 
+                                   bias=False)
 
-        if conv_params is None or conv_params[0] is None:
-            if n_feat < 32 and n_channel < 64:
-                kernel_size, padding = 1, 0
-            else:
-                kernel_size, padding = 5, 2
-        else:
-            kernel_size, padding = conv_params
+        self.encoder = Encoder(n_layer=n_layer_enc, 
+                               n_embd=n_embd, 
+                               n_heads=n_heads, 
+                               attn_pdrop=attn_pdrop, 
+                               resid_pdrop=resid_pdrop, 
+                               mlp_hidden_times=mlp_hidden_times, 
+                               )
+        
+        self.pos_enc = LearnablePositionalEncoding(n_embd, 
+                                                   dropout=resid_pdrop, 
+                                                   max_len=max_len)
 
-        self.combine_s = nn.Conv1d(n_embd, n_feat, kernel_size=kernel_size, stride=1, padding=padding,
-                                   padding_mode='circular', bias=False)
-        self.combine_m = nn.Conv1d(n_layer_dec, 1, kernel_size=1, stride=1, padding=0,
-                                   padding_mode='circular', bias=False)
+        self.decoder = Decoder(n_channel, 
+                               n_feat, 
+                               n_embd, 
+                               n_heads, 
+                               n_layer_dec, 
+                               attn_pdrop, 
+                               resid_pdrop, 
+                               mlp_hidden_times,
+                               condition_dim=n_embd)
+        
+        self.pos_dec = LearnablePositionalEncoding(n_embd, 
+                                                   dropout=resid_pdrop, 
+                                                   max_len=max_len)
 
-        self.encoder = Encoder(n_layer_enc, n_embd, n_heads, attn_pdrop, resid_pdrop, mlp_hidden_times, block_activate)
-        self.pos_enc = LearnablePositionalEncoding(n_embd, dropout=resid_pdrop, max_len=max_len)
+    def forward(self, input, t):
+        embedding = self.embedding(input)
+        inp_enc = self.pos_enc(embedding)
+        enc_cond = self.encoder(inp_enc, t)
 
-        self.decoder = Decoder(n_channel, n_feat, n_embd, n_heads, n_layer_dec, attn_pdrop, resid_pdrop, mlp_hidden_times,
-                               block_activate, condition_dim=n_embd)
-        self.pos_dec = LearnablePositionalEncoding(n_embd, dropout=resid_pdrop, max_len=max_len)
-
-    def forward(self, input, t, padding_masks=None):
-        emb = self.emb(input)
-        inp_enc = self.pos_enc(emb)
-        enc_cond = self.encoder(inp_enc, t, padding_masks=padding_masks)
-
-        inp_dec = self.pos_dec(emb)
-        output, mean, trend, season = self.decoder(inp_dec, t, enc_cond, padding_masks=padding_masks)
+        inp_dec = self.pos_dec(embedding)
+        output, mean, trend, season = self.decoder(inp_dec, t, enc_cond)
 
         res = self.inverse(output)
         res_m = torch.mean(res, dim=1, keepdim=True)

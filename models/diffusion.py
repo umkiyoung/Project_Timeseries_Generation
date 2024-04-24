@@ -14,44 +14,40 @@ class Diffusion_TS(nn.Module):
     def __init__(
             self,
             seq_length,
-            feature_size,
+            n_feat,
             n_layer_enc=3,
             n_layer_dec=6,
-            d_model=None,
+            n_embd=None,
             timesteps=1000,
             sampling_timesteps=None,
             loss_type='l1',
             n_heads=4,
             mlp_hidden_times=4,
             eta=0.,
-            attn_pd=0.,
-            resid_pd=0.,
-            kernel_size=None,
-            padding_size=None,
+            attn_pdrop=0.,
+            resid_pdrop=0.,
             use_ff=True,
             reg_weight=None,
-            **kwargs
     ):
         super().__init__()
         
         # model
-        self.model = Transformer(n_feat=feature_size, 
+        self.model = Transformer(n_feat=n_feat, 
                                  n_channel=seq_length, 
                                  n_layer_enc=n_layer_enc, 
                                  n_layer_dec=n_layer_dec,
+                                 n_embd=n_embd,
                                  n_heads=n_heads, 
-                                 attn_pdrop=attn_pd, 
-                                 resid_pdrop=resid_pd, 
+                                 attn_pdrop=attn_pdrop, 
+                                 resid_pdrop=resid_pdrop, 
                                  mlp_hidden_times=mlp_hidden_times,
                                  max_len=seq_length, 
-                                 n_embd=d_model, 
-                                 conv_params=[kernel_size, padding_size], 
-                                 **kwargs)
+                                 )
         self.timesteps = int(timesteps)
         self.loss_type = loss_type
         self.eta, self.use_ff = eta, use_ff
         self.seq_length = seq_length
-        self.feature_size = feature_size
+        self.n_feat = n_feat
         self.ff_weight = default(reg_weight, math.sqrt(self.seq_length) / 5)
 
         # To enhance computing performance
@@ -152,7 +148,7 @@ class Diffusion_TS(nn.Module):
         return train_loss.mean()
 
     def forward(self, x, **kwargs):
-        b, c, n, device, feature_size, = *x.shape, x.device, self.feature_size
+        b, c, n, device, feature_size, = *x.shape, x.device, self.n_feat
         assert n == feature_size, f'number of variable must be {feature_size}'
         t = torch.randint(0, self.timesteps, (b,), device=device).long()
         
@@ -160,7 +156,7 @@ class Diffusion_TS(nn.Module):
     
     # sampling
     def generate_mts(self, batch_size=16):
-        feature_size, seq_length = self.feature_size, self.seq_length
+        feature_size, seq_length = self.n_feat, self.seq_length
         sample_fn = self.fast_sample if self.fast_sampling else self.sample
         
         return sample_fn((batch_size, seq_length, feature_size))

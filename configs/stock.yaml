@@ -2,24 +2,21 @@ model:
   target: models.diffusion.Diffusion_TS
   params:
     seq_length: 24
-    feature_size: 6
+    n_feat: 5
     n_layer_enc: 2
     n_layer_dec: 2
-    d_model: 64  # 4 X 16
+    n_embd: 64  # 4 X 16
     timesteps: 500
     sampling_timesteps: 500
     loss_type: 'l1'
-    beta_schedule: 'cosine'
     n_heads: 4
     mlp_hidden_times: 4
-    attn_pd: 0.0
-    resid_pd: 0.0
-    kernel_size: 1
-    padding_size: 0
+    attn_pdrop: 0.0
+    resid_pdrop: 0.0
 
 solver:
   base_lr: 1.0e-5
-  max_epochs: 500
+  max_epochs: 10000
   results_folder: ./check_points/stock
   gradient_accumulate_every: 2
   save_cycle: 1000  # max_epochs // 10
@@ -43,7 +40,7 @@ dataloader:
   train_dataset:
     target: data.datasets.StockDataset
     params:
-      symbol : 'AAPL'
+      symbol : 'AAPL, MSFT, NVDA, AMZN, COST'
       sdate : '2000'
       edate : '2024'
       window: 24 
