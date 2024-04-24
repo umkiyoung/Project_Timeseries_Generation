@@ -7,7 +7,7 @@ from einops import reduce
 from tqdm.auto import tqdm
 from functools import partial
 from models.transformer import Transformer
-from utils.model_utils import default, extract, identity
+from utils.utils import default, extract, identity
 
 
 class Diffusion_TS(nn.Module):

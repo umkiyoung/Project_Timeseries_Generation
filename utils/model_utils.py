@@ -3,28 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-def exists(x):
-    return x is not None
-
-def default(val, d):
-    # used
-    if exists(val):
-        return val
-    return d() if callable(d) else d
-
-def identity(t, *args, **kwargs):
-    # used
-    return t
-
-def extract(a, t, x_shape):
-    # used
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
-
-# sinusoidal positional embeds
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -40,7 +18,6 @@ class SinusoidalPosEmb(nn.Module):
         return emb
 
 
-# learnable positional embeds
 class LearnablePositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=1024):
         super(LearnablePositionalEncoding, self).__init__()
@@ -61,39 +38,6 @@ class LearnablePositionalEncoding(nn.Module):
         # print(x.shape)
         x = x + self.pe
         return self.dropout(x)
-
-
-class moving_avg(nn.Module):
-    """
-    Moving average block to highlight the trend of time series
-    """
-    def __init__(self, kernel_size, stride):
-        super(moving_avg, self).__init__()
-        self.kernel_size = kernel_size
-        self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=stride, padding=0)
-
-    def forward(self, x):
-        # padding on the both ends of time series
-        front = x[:, 0:1, :].repeat(1, self.kernel_size - 1-math.floor((self.kernel_size - 1) // 2), 1)
-        end = x[:, -1:, :].repeat(1, math.floor((self.kernel_size - 1) // 2), 1)
-        x = torch.cat([front, x, end], dim=1)
-        x = self.avg(x.permute(0, 2, 1))
-        x = x.permute(0, 2, 1)
-        return x
-
-
-class series_decomp(nn.Module):
-    """
-    Series decomposition block
-    """
-    def __init__(self, kernel_size):
-        super(series_decomp, self).__init__()
-        self.moving_avg = moving_avg(kernel_size, stride=1)
-
-    def forward(self, x):
-        moving_mean = self.moving_avg(x)
-        res = x - moving_mean
-        return res, moving_mean
 
 
 class Transpose(nn.Module):

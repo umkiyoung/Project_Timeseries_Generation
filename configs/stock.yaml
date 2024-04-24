@@ -28,7 +28,7 @@ solver:
     update_interval: 10
   
   scheduler:
-    target: utils.lr_sch.ReduceLROnPlateauWithWarmup
+    target: utils.lr_scheduler.ReduceLROnPlateauWithWarmup
     params:
       factor: 0.5
       patience: 2000
@@ -65,6 +65,7 @@ dataloader:
     step_size: 5.0e-2
     sampling_steps: 200
 
-  batch_size: 64
+  batch_size: 128
   sample_size: 256
   shuffle: True
+  num_workers: 0

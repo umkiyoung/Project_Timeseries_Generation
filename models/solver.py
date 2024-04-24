@@ -1,5 +1,4 @@
 import os
-import sys
 import torch
 import numpy as np
 
@@ -8,14 +7,7 @@ from tqdm.auto import tqdm
 from ema_pytorch import EMA
 from torch.optim import Adam
 from torch.nn.utils import clip_grad_norm_
-from utils.io_utils import instantiate_from_config, get_model_parameters_info
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
-
-def cycle(dl):
-    while True:
-        for data in dl:
-            yield data
+from utils.utils import instantiate_from_config, cycle
 
 class Trainer(object):
     def __init__(self, config, model, dataloader):
@@ -67,40 +59,43 @@ class Trainer(object):
     def train(self):
         device = self.device
         step = 0
-
         with tqdm(initial=step, total=self.train_num_steps) as pbar:
             while step < self.train_num_steps:
-                total_loss = 0.
-                for _ in range(self.gradient_accumulate_every):
-                    data = next(self.dl).to(device)
-                    loss = self.model(data, target=data)
-                    loss = loss / self.gradient_accumulate_every
-                    loss.backward()
-                    total_loss += loss.item()
-
-                pbar.set_description(f'loss: {total_loss:.6f}')
-
+                # total_loss = 0.
+                # for _ in range(self.gradient_accumulate_every):
+                #     data = next(self.dl).to(device)
+                #     loss = self.model(data, target=data)
+                #     loss = loss / self.gradient_accumulate_every
+                #     loss.backward()
+                #     total_loss += loss.item()
+                    
+                data = next(self.dl).to(device)
+                loss = self.model(data, target=data)
+                loss.backward()
+                loss = loss.item()
+                
+                pbar.set_description(f'loss: {loss:.6f}')
                 clip_grad_norm_(self.model.parameters(), 1.0)
                 self.opt.step()
-                self.sch.step(total_loss)
+                self.sch.step(loss)
                 self.opt.zero_grad()
                 self.step += 1
                 step += 1
                 self.ema.update()
 
+                # save milestone
                 with torch.no_grad():
                     if self.step != 0 and self.step % self.save_cycle == 0:
                         self.milestone += 1
                         self.save(self.milestone)
-                    
                 pbar.update(1)
-
         print('training complete')
 
-    def sample(self, num, size_every, shape=None):
-        shape = [24, 6] # shape
-        num = 10000
-        size_every = 2001
+    def sample(self, num, size_every, shape):
+        # shape = [24, 6] 
+        # num = 10000
+        # size_every = 2001
+        
         samples = np.empty([0, shape[0], shape[1]])
         num_cycle = int(num // size_every) + 1
 
@@ -110,28 +105,3 @@ class Trainer(object):
             torch.cuda.empty_cache()
 
         return samples
-
-    def restore(self, raw_dataloader, shape=None, coef=1e-1, stepsize=1e-1, sampling_steps=50):
-
-        model_kwargs = {}
-        model_kwargs['coef'] = coef
-        model_kwargs['learning_rate'] = stepsize
-        samples = np.empty([0, shape[0], shape[1]])
-        reals = np.empty([0, shape[0], shape[1]])
-        masks = np.empty([0, shape[0], shape[1]])
-
-        for idx, (x, t_m) in enumerate(raw_dataloader):
-            x, t_m = x.to(self.device), t_m.to(self.device)
-            if sampling_steps == self.model.num_timesteps:
-                sample = self.ema.ema_model.sample_infill(shape=x.shape, target=x*t_m, partial_mask=t_m,
-                                                          model_kwargs=model_kwargs)
-            else:
-                sample = self.ema.ema_model.fast_sample_infill(shape=x.shape, target=x*t_m, partial_mask=t_m, model_kwargs=model_kwargs,
-                                                               sampling_timesteps=sampling_steps)
-
-            samples = np.row_stack([samples, sample.detach().cpu().numpy()])
-            reals = np.row_stack([reals, x.detach().cpu().numpy()])
-            masks = np.row_stack([masks, t_m.detach().cpu().numpy()])
-        
-        return samples, reals, masks
-        # return samples
