@@ -19,7 +19,7 @@ model:
 
 solver:
   base_lr: 1.0e-5
-  max_epochs: 10000
+  max_epochs: 500
   results_folder: ./check_points/stock
   gradient_accumulate_every: 2
   save_cycle: 1000  # max_epochs // 10
