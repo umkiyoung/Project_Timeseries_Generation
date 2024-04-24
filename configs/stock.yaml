@@ -68,4 +68,3 @@ dataloader:
   batch_size: 128
   sample_size: 256
   shuffle: True
-  num_workers: 0

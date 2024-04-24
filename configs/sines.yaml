@@ -28,7 +28,7 @@ solver:
     update_interval: 10
   
   scheduler:
-    target: utils.lr_sch.ReduceLROnPlateauWithWarmup
+    target: utils.lr_scheduler.ReduceLROnPlateauWithWarmup
     params:
       factor: 0.5
       patience: 3000
