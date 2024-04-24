@@ -161,7 +161,6 @@ class Diffusion_TS(nn.Module):
     # sampling
     def generate_mts(self, batch_size=16):
         feature_size, seq_length = self.feature_size, self.seq_length
-        
         sample_fn = self.fast_sample if self.fast_sampling else self.sample
         
         return sample_fn((batch_size, seq_length, feature_size))

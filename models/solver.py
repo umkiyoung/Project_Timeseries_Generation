@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import torch
 import numpy as np
 
@@ -19,17 +18,16 @@ def cycle(dl):
             yield data
 
 class Trainer(object):
-    def __init__(self, config, model, dataloader, logger=None):
+    def __init__(self, config, model, dataloader):
         super().__init__()
         self.model = model
         self.device = self.model.betas.device
-        self.train_num_steps = config['solver']['max_epochs']
+        self.train_num_steps = config['solver']['max_epochs'] # ?
         self.gradient_accumulate_every = config['solver']['gradient_accumulate_every']
         self.save_cycle = config['solver']['save_cycle']
         self.dl = cycle(dataloader)
         self.step = 0
         self.milestone = 0
-        self.logger = logger
 
         self.results_folder = Path(config['solver']['results_folder'] + f'_{model.seq_length}')
         os.makedirs(self.results_folder, exist_ok=True)
@@ -45,26 +43,21 @@ class Trainer(object):
         sc_cfg['params']['optimizer'] = self.opt
         self.sch = instantiate_from_config(sc_cfg)
 
-        if self.logger is not None:
-            self.logger.log_info(str(get_model_parameters_info(self.model)))
         self.log_frequency = 100
 
-    def save(self, milestone, verbose=False):
-        if self.logger is not None and verbose:
-            self.logger.log_info('Save current model to {}'.format(str(self.results_folder / f'checkpoint-{milestone}.pt')))
+    def save(self, milestone):
         data = {
             'step': self.step,
             'model': self.model.state_dict(),
             'ema': self.ema.state_dict(),
             'opt': self.opt.state_dict(),
         }
-        torch.save(data, str(self.results_folder / f'checkpoint-{milestone}.pt'))
+        path = f"{self.results_folder}/checkpoint-{milestone}.pt"
+        torch.save(data, path)
 
-    def load(self, milestone, verbose=False):
-        if self.logger is not None and verbose:
-            self.logger.log_info('Resume from {}'.format(str(self.results_folder / f'checkpoint-{milestone}.pt')))
-        device = self.device
-        data = torch.load(str(self.results_folder / f'checkpoint-{milestone}.pt'), map_location=device)
+    def load(self, milestone):
+        path = f"{self.results_folder}/checkpoint-{milestone}.pt"
+        data = torch.load(path, map_location=self.device)
         self.model.load_state_dict(data['model'])
         self.step = data['step']
         self.opt.load_state_dict(data['opt'])
@@ -103,10 +96,11 @@ class Trainer(object):
                 pbar.update(1)
 
         print('training complete')
-        if self.logger is not None:
-            self.logger.log_info('Training done, time: {:.2f}'.format(time.time() - tic))
 
     def sample(self, num, size_every, shape=None):
+        shape = [24, 6] # shape
+        num = 10000
+        size_every = 2001
         samples = np.empty([0, shape[0], shape[1]])
         num_cycle = int(num // size_every) + 1
 
@@ -118,9 +112,7 @@ class Trainer(object):
         return samples
 
     def restore(self, raw_dataloader, shape=None, coef=1e-1, stepsize=1e-1, sampling_steps=50):
-        if self.logger is not None:
-            tic = time.time()
-            self.logger.log_info('Begin to restore...')
+
         model_kwargs = {}
         model_kwargs['coef'] = coef
         model_kwargs['learning_rate'] = stepsize
@@ -141,7 +133,5 @@ class Trainer(object):
             reals = np.row_stack([reals, x.detach().cpu().numpy()])
             masks = np.row_stack([masks, t_m.detach().cpu().numpy()])
         
-        if self.logger is not None:
-            self.logger.log_info('Imputation done, time: {:.2f}'.format(time.time() - tic))
         return samples, reals, masks
         # return samples
