@@ -8,3 +8,4 @@ python v3.12
 we can easily generate time-series data
 execute .ipynb files
 
+modifying the yaml files in the configs, you can conduct various experiments
